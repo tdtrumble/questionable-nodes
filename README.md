@@ -2,7 +2,7 @@
 
 Useful nodes. Questionable organization.
 
-An eclectic collection of practical ComfyUI nodes by **tdtrumble**. Version 0.1.0. MIT licensed.
+An eclectic collection of practical ComfyUI nodes.
 
 ## Installation
 
