@@ -10,6 +10,12 @@ Place this folder in `ComfyUI/custom_nodes/questionable-nodes`, restart ComfyUI,
 and refresh the browser. Requires a current ComfyUI with the V3 node API.
 No additional Python packages are needed. Registry/Manager publication is not configured.
 
+To reinstall from GitHub, run this from your ComfyUI directory (requires access to the repository):
+
+```sh
+git clone https://github.com/tdtrumble/questionable-nodes.git custom_nodes/questionable-nodes
+```
+
 ## LoRA Audition
 
 Find **LoRA Audition** under **Questionable Nodes/loaders**.
