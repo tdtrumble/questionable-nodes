@@ -25,11 +25,18 @@ app.registerExtension({
             const scan = document.createElement("button");
             scan.textContent = "Scan";
             scan.style.cursor = "pointer";
+            const selectAll = document.createElement("button");
+            selectAll.textContent = "Select All";
+            selectAll.style.cursor = "pointer";
+            const actions = document.createElement("div");
+            Object.assign(actions.style, { display: "flex", gap: "6px" });
+            scan.style.flex = selectAll.style.flex = "1";
+            actions.append(scan, selectAll);
             const status = document.createElement("div");
             status.setAttribute("role", "status");
             const list = document.createElement("div");
             Object.assign(list.style, { overflowY: "auto", flex: "1", minHeight: "0" });
-            panel.append(scan, status, list);
+            panel.append(actions, status, list);
             node.addDOMWidget("lora_files", "div", panel, {
                 serialize: false, getMinHeight: () => 180, getMaxHeight: () => 500,
             });
@@ -48,6 +55,7 @@ app.registerExtension({
                 list.replaceChildren();
                 const files = state.files ?? [];
                 const checked = new Set(state.selected ?? []);
+                selectAll.disabled = !files.length;
                 status.textContent = files.length
                     ? `${checked.size} selected / ${files.length} files`
                     : "Click Scan to list LoRA files. Select at least one.";
@@ -73,6 +81,12 @@ app.registerExtension({
                     list.append(row);
                 }
             }
+            selectAll.addEventListener("click", () => {
+                const state = readState();
+                state.selected = [...(state.files ?? [])];
+                writeState(state);
+                render();
+            });
             function reset() {
                 scanId++;
                 scan.disabled = false;
@@ -90,6 +104,7 @@ app.registerExtension({
                 const id = ++scanId;
                 const settings = { directory: directory.value, recursive: recursive.value };
                 scan.disabled = true;
+                selectAll.disabled = true;
                 status.textContent = "Scanning…";
                 try {
                     const response = await api.fetchApi("/questionable-nodes/loras/scan", {
@@ -108,7 +123,10 @@ app.registerExtension({
                 } catch (error) {
                     if (id === scanId) status.textContent = error.message;
                 } finally {
-                    if (id === scanId) scan.disabled = false;
+                    if (id === scanId) {
+                        scan.disabled = false;
+                        selectAll.disabled = !(readState().files?.length);
+                    }
                 }
             });
             const onConfigure = node.onConfigure;

@@ -39,8 +39,9 @@ async function setup() {
     await extension.beforeRegisterNodeDef(Node, { name: "QuestionableLoRAAudition" });
     const node = new Node();
     node.onNodeCreated();
-    const [scan, status, list] = node.panel.children;
-    return { node, scan, status, list, state: () => JSON.parse(node.widgets[2].value),
+    const [actions, status, list] = node.panel.children;
+    const [scan, selectAll] = actions.children;
+    return { node, scan, selectAll, status, list, state: () => JSON.parse(node.widgets[2].value),
         setFiles(value) { files = value; }, setResponse(value) { response = value; } };
 }
 
@@ -56,6 +57,10 @@ test("scan defaults unchecked, rescan keeps selections and unchecks new files", 
     await ui.scan.events.click();
     assert.deepEqual(ui.state().selected, ["a.safetensors"]);
     assert.equal(ui.list.children[1].children[0].checked, false);
+    ui.selectAll.events.click();
+    assert.deepEqual(ui.state().selected, ["a.safetensors", "new.safetensors"]);
+    assert.equal(ui.list.children.every(row => row.children[0].checked), true);
+    assert.equal(ui.status.textContent, "2 selected / 2 files");
 });
 
 test("saved selection is restored and directory changes clear the list", async () => {
@@ -68,6 +73,7 @@ test("saved selection is restored and directory changes clear the list", async (
     ui.node.widgets[0].callback();
     assert.deepEqual(ui.state().selected, []);
     assert.equal(ui.list.children.length, 0);
+    assert.equal(ui.selectAll.disabled, true);
 });
 
 test("recursive changes clear selections and stale scans cannot restore them", async () => {
