@@ -1,0 +1,11 @@
+[project]
+name = "questionable-nodes"
+version = "0.1.0"
+description = "An eclectic collection of practical ComfyUI nodes."
+authors = [{ name = "tdtrumble" }]
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.comfy]
+DisplayName = "Questionable Nodes"
