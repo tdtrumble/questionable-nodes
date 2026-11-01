@@ -24,6 +24,7 @@ Find **LoRA Audition** under **Questionable Nodes/loaders**.
 2. Enter a directory on the machine running ComfyUI. Enable **recursive** to include subfolders.
 3. Click **Scan**, then check the LoRAs you want to compare, or click **Select All**.
    New files start unchecked. Select All is available when the scan has results.
+   When every file is checked, the button becomes **Deselect All**; click again to clear the selection.
 4. Set the shared model and CLIP strengths.
 5. Connect MODEL to your sampler and CLIP to your text encoders. Optionally connect
    **filename** to Save Image's `filename_prefix` (convert that widget to an input).

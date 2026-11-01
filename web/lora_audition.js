@@ -56,6 +56,7 @@ app.registerExtension({
                 const files = state.files ?? [];
                 const checked = new Set(state.selected ?? []);
                 selectAll.disabled = !files.length;
+                selectAll.textContent = files.length && files.every(name => checked.has(name)) ? "Deselect All" : "Select All";
                 status.textContent = files.length
                     ? `${checked.size} selected / ${files.length} files`
                     : "Click Scan to list LoRA files. Select at least one.";
@@ -76,6 +77,7 @@ app.registerExtension({
                         current.selected = current.files.filter(file => selected.has(file));
                         writeState(current);
                         status.textContent = `${current.selected.length} selected / ${current.files.length} files`;
+                        selectAll.textContent = current.selected.length === current.files.length ? "Deselect All" : "Select All";
                     });
                     row.append(checkbox, document.createTextNode(name));
                     list.append(row);
@@ -83,7 +85,9 @@ app.registerExtension({
             }
             selectAll.addEventListener("click", () => {
                 const state = readState();
-                state.selected = [...(state.files ?? [])];
+                const files = state.files ?? [];
+                const checked = new Set(state.selected ?? []);
+                state.selected = files.every(name => checked.has(name)) ? [] : [...files];
                 writeState(state);
                 render();
             });

@@ -61,6 +61,20 @@ test("scan defaults unchecked, rescan keeps selections and unchecks new files", 
     assert.deepEqual(ui.state().selected, ["a.safetensors", "new.safetensors"]);
     assert.equal(ui.list.children.every(row => row.children[0].checked), true);
     assert.equal(ui.status.textContent, "2 selected / 2 files");
+    assert.equal(ui.selectAll.textContent, "Deselect All");
+    ui.selectAll.events.click();
+    assert.deepEqual(ui.state().selected, []);
+    assert.equal(ui.list.children.every(row => !row.children[0].checked), true);
+    assert.equal(ui.status.textContent, "0 selected / 2 files");
+    assert.equal(ui.selectAll.textContent, "Select All");
+    for (const row of ui.list.children) {
+        row.children[0].checked = true;
+        row.children[0].events.change();
+    }
+    assert.equal(ui.selectAll.textContent, "Deselect All");
+    ui.list.children[0].children[0].checked = false;
+    ui.list.children[0].children[0].events.change();
+    assert.equal(ui.selectAll.textContent, "Select All");
 });
 
 test("saved selection is restored and directory changes clear the list", async () => {
