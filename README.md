@@ -96,6 +96,50 @@ Sessions live in `output/audition_sessions/*.json`; images live in `output/audit
 Back up both folders to preserve reviews. Session names are hashed into safe filenames.
 All persistence and requests stay on your ComfyUI server. No new dependencies are needed.
 
+## Live LoRA Tuner
+
+Find **Live LoRA Tuner** under **Questionable Nodes/audition**. Connect an incoming
+MODEL without the LoRA you are tuning, positive/negative CONDITIONING, an empty or
+encoded LATENT, and VAE. Choose a LoRA from the normal `models/loras` list. Connect
+your text encoder directly to the conditioning nodes: this tuner adjusts the
+model-side LoRA only, not text-encoder weights.
+
+Click **Start live preview**. The first image discovers the loaded LoRA's native
+model blocks and creates their sliders. Moving sliders or editing numeric weights
+automatically queues another preview after a 300 ms pause. Only one preview job
+per tuner is outstanding; edits during generation collapse into one latest-settings
+update. Other workflow output branches are excluded. **Stop live preview** stops
+new automatic jobs; an already queued/running job may finish. Removing the node
+also attempts to delete its pending job without interrupting other GPU work.
+
+The left image is the first-render reference; the right image is the latest result.
+**Pin reference** replaces the reference with the current image. **Reset sliders**
+restores all block multipliers to 1. Sliders cover -2 to 3; numeric fields accept
+other finite values. The shared strength multiplies each block's setting.
+Block names come from native model patch targets, including Krea 2's main blocks
+and text-fusion blocks. Unclassified targets are grouped as `other_weights`.
+
+Set preview steps, verification steps, CFG, sampler, scheduler, and denoise for
+your model. Four steps/CFG 1 are defaults intended for accelerated models, not a
+quality guarantee. **Verify** renders with verification steps and the original
+latent. An optional smaller **preview_latent** accelerates previews while keeping
+verification at your target dimensions. The seed stays fixed between updates.
+**tuned_model** can feed your own generation chain using the same block settings.
+
+**Save LoRA** writes a new file under `output/audition_loras/`, with the shared and
+block strengths baked in; load it at strength 1.0. Standard LoRA/LoCon up/down
+factors are supported for export; DoRA and other adapter formats are rejected
+rather than exported with incorrect strength math. Text-encoder tensors, if present,
+remain unchanged and are not represented in model-only previews. Move the exported
+file into a model LoRA folder to select it in loaders.
+
+Updates are real GPU renders through ComfyUI's normal queue, sampling, model
+patching, and offloading. Upstream workflow caching is reused, but there is no
+model-internal activation cache or instantaneous-refresh guarantee. The LoRA is
+read again when settings change, rather than kept in an additional tensor cache.
+Wait time depends on hardware, model, steps, latent size, and other queued work.
+Live mode starts stopped after reopening a workflow; saved block values persist.
+
 ## Development checks
 
 From the ComfyUI directory, using its Python environment:

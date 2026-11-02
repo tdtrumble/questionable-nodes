@@ -1,6 +1,6 @@
 [project]
 name = "questionable-nodes"
-version = "0.3.0"
+version = "0.4.0"
 description = "An eclectic collection of practical ComfyUI nodes."
 authors = [{ name = "tdtrumble" }]
 license = { file = "LICENSE" }
