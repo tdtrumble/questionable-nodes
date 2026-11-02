@@ -42,6 +42,7 @@ app.registerExtension({
             });
 
             let scanId = 0;
+            let draggedName = null;
             function readState() {
                 try { return JSON.parse(selection.value); }
                 catch { return { selected: [] }; }
@@ -62,6 +63,7 @@ app.registerExtension({
                     : "Click Scan to list LoRA files. Select at least one.";
                 for (const name of files) {
                     const row = document.createElement("label");
+                    row.title = "Drag the handle to change run order (top to bottom).";
                     Object.assign(row.style, {
                         display: "flex", alignItems: "center", gap: "6px", padding: "3px 0",
                         overflowWrap: "anywhere", cursor: "pointer",
@@ -79,7 +81,53 @@ app.registerExtension({
                         status.textContent = `${current.selected.length} selected / ${current.files.length} files`;
                         selectAll.textContent = current.selected.length === current.files.length ? "Deselect All" : "Select All";
                     });
-                    row.append(checkbox, document.createTextNode(name));
+                    const handle = document.createElement("span");
+                    handle.textContent = "⠿";
+                    handle.draggable = true;
+                    handle.title = "Drag to reorder";
+                    handle.style.cursor = "grab";
+                    handle.addEventListener("click", event => event.preventDefault());
+                    handle.addEventListener("dragstart", event => {
+                        draggedName = name;
+                        event.dataTransfer.effectAllowed = "move";
+                        event.dataTransfer.setData("text/plain", name);
+                        event.stopPropagation();
+                    });
+                    handle.addEventListener("dragend", () => {
+                        draggedName = null;
+                        for (const item of list.children) item.style.boxShadow = "";
+                    });
+                    row.addEventListener("dragover", event => {
+                        if (draggedName === null || draggedName === name) return;
+                        event.preventDefault();
+                        event.stopPropagation();
+                        event.dataTransfer.dropEffect = "move";
+                        const bounds = row.getBoundingClientRect();
+                        row.style.boxShadow = event.clientY < bounds.top + bounds.height / 2
+                            ? "inset 0 2px #888" : "inset 0 -2px #888";
+                    });
+                    row.addEventListener("dragleave", () => { row.style.boxShadow = ""; });
+                    row.addEventListener("drop", event => {
+                        if (draggedName === null) return;
+                        event.preventDefault();
+                        event.stopPropagation();
+                        row.style.boxShadow = "";
+                        if (draggedName === name) return;
+                        const current = readState();
+                        const files = current.files.filter(file => file !== draggedName);
+                        const bounds = row.getBoundingClientRect();
+                        const after = event.clientY >= bounds.top + bounds.height / 2;
+                        files.splice(files.indexOf(name) + (after ? 1 : 0), 0, draggedName);
+                        const selected = new Set(current.selected);
+                        current.files = files;
+                        current.selected = files.filter(file => selected.has(file));
+                        draggedName = null;
+                        writeState(current);
+                        const scrollTop = list.scrollTop;
+                        render();
+                        list.scrollTop = scrollTop;
+                    });
+                    row.append(checkbox, handle, document.createTextNode(name));
                     list.append(row);
                 }
             }
@@ -119,9 +167,13 @@ app.registerExtension({
                     if (id !== scanId) return;
                     if (!response.ok) throw new Error(data.error ?? "Directory scan failed.");
                     const previous = readState();
-                    const keep = previous.directory === settings.directory && previous.recursive === settings.recursive
-                        ? new Set(previous.selected ?? []) : new Set();
-                    writeState({ ...settings, files: data.files, selected: data.files.filter(name => keep.has(name)) });
+                    const sameSettings = previous.directory === settings.directory && previous.recursive === settings.recursive;
+                    const keep = new Set(sameSettings ? previous.selected ?? [] : []);
+                    const available = new Set(data.files);
+                    const retained = sameSettings ? (previous.files ?? []).filter(name => available.has(name)) : [];
+                    const retainedSet = new Set(retained);
+                    const files = [...retained, ...data.files.filter(name => !retainedSet.has(name))];
+                    writeState({ ...settings, files, selected: files.filter(name => keep.has(name)) });
                     render();
                     if (!data.files.length) status.textContent = "No LoRA files found in this directory.";
                 } catch (error) {

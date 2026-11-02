@@ -78,20 +78,45 @@ class LoRAAuditionTests(unittest.TestCase):
             with patch.object(audition.comfy.sd, "load_lora_for_models", side_effect=apply):
                 output = audition.LoRAAudition.execute(model, clip, str(self.root), False, 0.8, 0.6, self.selection(["B.safetensors", "a.safetensors"]))
         self.assertEqual(load.call_count, 2)
-        self.assertEqual(audition.LoRAAudition.OUTPUT_IS_LIST, [True, True, True])
+        self.assertEqual(audition.LoRAAudition.OUTPUT_IS_LIST, [True] * 6)
         merged = merge_result_data([output.result], audition.LoRAAudition)
         class NativeConsumer:
             def execute(self, model, clip, filename, seed):
                 return (model, clip, filename, seed)
         results = asyncio.run(_async_map_node_over_list("test", "consumer", NativeConsumer(),
             dict(zip(["model", "clip", "filename"], merged)) | {"seed": [42]}, "execute"))
-        self.assertEqual(results, [("model:a", "clip:a", "a", 42), ("model:B", "clip:B", "B", 42)])
+        self.assertEqual(results, [("model:B", "clip:B", "B", 42), ("model:a", "clip:a", "a", 42)])
+
+    def test_selection_order_and_duplicates(self):
+        selection = self.selection(["B.safetensors", "a.safetensors", "B.safetensors"])
+        self.assertEqual([path.name for path in audition.selected_paths(str(self.root), False, selection)],
+                         ["B.safetensors", "a.safetensors"])
+        self.assertNotEqual(audition.LoRAAudition.fingerprint_inputs(str(self.root), False, selection),
+                            audition.LoRAAudition.fingerprint_inputs(str(self.root), False, self.selection(["a.safetensors", "B.safetensors"])))
+
+    def test_clip_is_optional_and_model_only_loading_keeps_alignment(self):
+        schema = audition.LoRAAudition.define_schema()
+        self.assertTrue(next(item for item in schema.inputs if item.id == "clip").optional)
+        with patch.object(audition.comfy.utils, "load_torch_file", return_value=({}, {})):
+            with patch.object(audition.comfy.sd, "load_lora_for_models", return_value=("patched", None)) as apply:
+                output = audition.LoRAAudition.execute(model="model", directory=str(self.root), recursive=False,
+                    strength_model=0.8, strength_clip=1, selection=self.selection(["B.safetensors", "a.safetensors"]))
+        self.assertEqual(apply.call_count, 2)
+        apply.assert_called_with("model", None, {}, 0.8, 1, lora_metadata={})
+        self.assertEqual(output.result[:3], (["patched", "patched"], [None, None], ["B", "a"]))
+
+    def test_model_only_zero_strength_does_not_load_weights(self):
+        with patch.object(audition.comfy.utils, "load_torch_file") as load:
+            output = audition.LoRAAudition.execute(model="model", directory=str(self.root), strength_model=0,
+                selection=self.selection(["B.safetensors"]))
+        load.assert_not_called()
+        self.assertEqual(output.result[:3], (["model"], [None], ["B"]))
 
     def test_zero_strength_still_outputs_every_selected_name(self):
         with patch.object(audition.comfy.utils, "load_torch_file") as load:
             output = audition.LoRAAudition.execute("model", "clip", str(self.root), False, 0, 0, self.selection(["a.safetensors", "B.safetensors"]))
         load.assert_not_called()
-        self.assertEqual(output.result, (["model", "model"], ["clip", "clip"], ["a", "B"]))
+        self.assertEqual(output.result[:3], (["model", "model"], ["clip", "clip"], ["a", "B"]))
 
 
 if __name__ == "__main__":

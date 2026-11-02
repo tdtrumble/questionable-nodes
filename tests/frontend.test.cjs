@@ -10,6 +10,7 @@ class Element {
     replaceChildren(...children) { this.children = children; }
     setAttribute() {}
     addEventListener(name, handler) { this.events[name] = handler; }
+    getBoundingClientRect() { return { top: 0, height: 20 }; }
 }
 
 async function setup() {
@@ -111,4 +112,35 @@ test("scan errors are visible and allow retry", async () => {
     await ui.scan.events.click();
     assert.equal(ui.status.textContent, "Directory not found");
     assert.equal(ui.scan.disabled, false);
+});
+
+test("drag order controls selections and survives rescanning and workflow restore", async () => {
+    const ui = await setup();
+    ui.setFiles(["a.safetensors", "B.safetensors", "c.safetensors"]);
+    await ui.scan.events.click();
+    ui.selectAll.events.click();
+    const event = clientY => ({ clientY, preventDefault() {}, stopPropagation() {},
+        dataTransfer: { setData() {} } });
+    ui.list.children[2].children[1].events.dragstart(event(0));
+    ui.list.children[0].events.dragover(event(0));
+    ui.list.children[0].events.drop(event(0));
+    assert.deepEqual(ui.state().files, ["c.safetensors", "a.safetensors", "B.safetensors"]);
+    assert.deepEqual(ui.state().selected, ui.state().files);
+    ui.list.children[0].children[1].events.dragstart(event(20));
+    ui.list.children[2].events.drop(event(20));
+    assert.deepEqual(ui.state().selected, ["a.safetensors", "B.safetensors", "c.safetensors"]);
+    ui.list.children[0].children[0].checked = false;
+    ui.list.children[0].children[0].events.change();
+    ui.list.children[0].children[1].events.dragstart(event(20));
+    ui.list.children[1].events.drop(event(20));
+    assert.deepEqual(ui.state().files, ["B.safetensors", "a.safetensors", "c.safetensors"]);
+    assert.deepEqual(ui.state().selected, ["B.safetensors", "c.safetensors"]);
+    ui.setFiles(["a.safetensors", "B.safetensors", "new.safetensors"]);
+    await ui.scan.events.click();
+    assert.deepEqual(ui.state().files, ["B.safetensors", "a.safetensors", "new.safetensors"]);
+    assert.deepEqual(ui.state().selected, ["B.safetensors"]);
+    ui.node.onConfigure();
+    assert.deepEqual(ui.list.children.map(row => row.children[2]), ui.state().files);
+    ui.selectAll.events.click();
+    assert.deepEqual(ui.state().selected, ["B.safetensors", "a.safetensors", "new.safetensors"]);
 });

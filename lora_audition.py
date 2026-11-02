@@ -1,3 +1,4 @@
+import hashlib
 import json
 from pathlib import Path
 
@@ -51,7 +52,7 @@ def selected_paths(directory, recursive, selection):
     if any(not isinstance(name, str) or not name for name in names):
         raise ValueError("Invalid LoRA selection. Click Scan again.")
     root = directory_path(directory)
-    return [lora_path(root, name, recursive) for name in sorted(set(names), key=lambda name: (name.casefold(), name))]
+    return [lora_path(root, name, recursive) for name in dict.fromkeys(names)]
 
 
 class LoRAAudition(io.ComfyNode):
@@ -61,21 +62,25 @@ class LoRAAudition(io.ComfyNode):
             node_id="QuestionableLoRAAudition",
             display_name="LoRA Audition",
             category="Questionable Nodes/loaders",
-            description="Try each checked LoRA independently in one job. Outputs matching lists of models, CLIPs, and filenames.",
+            description="Try checked LoRAs independently in displayed order. Attach Audition Prompt List to run every prompt against every LoRA.",
             search_aliases=["lora", "folder", "compare", "batch"],
             inputs=[
                 io.Model.Input("model"),
-                io.Clip.Input("clip"),
+                io.Clip.Input("clip", optional=True),
                 io.String.Input("directory", default="", tooltip="Directory on the ComfyUI server's machine."),
                 io.Boolean.Input("recursive", default=False),
                 io.Float.Input("strength_model", default=1.0, min=-100.0, max=100.0, step=0.01),
                 io.Float.Input("strength_clip", default=1.0, min=-100.0, max=100.0, step=0.01),
                 io.String.Input("selection", default='{"selected":[]}', socketless=True),
+                io.Custom("AUDITION_PROMPTS").Input("prompts", optional=True),
             ],
             outputs=[
                 io.Model.Output(is_output_list=True),
                 io.Clip.Output(is_output_list=True),
                 io.String.Output(display_name="filename", is_output_list=True),
+                io.String.Output(display_name="prompt", is_output_list=True),
+                io.Int.Output(display_name="seed", is_output_list=True),
+                io.Custom("AUDITION_COMPARISON").Output(display_name="comparison", is_output_list=True),
             ],
         )
 
@@ -93,10 +98,11 @@ class LoRAAudition(io.ComfyNode):
                      for path in selected_paths(directory, recursive, selection))
 
     @classmethod
-    def execute(cls, model, clip, directory, recursive, strength_model, strength_clip, selection):
+    def execute(cls, model, clip=None, directory="", recursive=False, strength_model=1.0, strength_clip=1.0, selection='{"selected":[]}', prompts=None):
         models, clips, filenames = [], [], []
-        for path in selected_paths(directory, recursive, selection):
-            if strength_model == 0 and strength_clip == 0:
+        paths = selected_paths(directory, recursive, selection)
+        for path in paths:
+            if strength_model == 0 and (clip is None or strength_clip == 0):
                 patched_model, patched_clip = model, clip
             else:
                 lora, metadata = comfy.utils.load_torch_file(str(path), safe_load=True, return_metadata=True)
@@ -105,4 +111,22 @@ class LoRAAudition(io.ComfyNode):
             models.append(patched_model)
             clips.append(patched_clip)
             filenames.append(path.stem)
-        return io.NodeOutput(models, clips, filenames)
+        if prompts is None:
+            return io.NodeOutput(models, clips, filenames, [""], [42], [])
+        candidates = []
+        for path in paths:
+            digest = hashlib.sha256()
+            with path.open("rb") as weights:
+                for chunk in iter(lambda: weights.read(1024 * 1024), b""):
+                    digest.update(chunk)
+            identity = hashlib.sha256((str(path) + ":" + digest.hexdigest()).encode()).hexdigest()
+            candidates.append({"id": identity, "name": path.relative_to(directory_path(directory)).as_posix()})
+        texts, seeds, comparisons = [], [], []
+        for prompt_index, text in enumerate(prompts["prompts"]):
+            for candidate in candidates:
+                texts.append(text)
+                seeds.append(prompts["seed"])
+                comparisons.append({"prompt_index": prompt_index, "prompt": text, "seed": prompts["seed"],
+                    "candidate": candidate, "strength_model": strength_model, "strength_clip": strength_clip})
+        count = len(prompts["prompts"])
+        return io.NodeOutput(models * count, clips * count, filenames * count, texts, seeds, comparisons)
