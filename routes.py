@@ -5,6 +5,7 @@ from server import PromptServer
 
 from .lora_audition import scan_directory
 from .audition_review import SESSION_LOCK, read_session, save_votes, session_view
+from .tuner_presets import list_presets, save_preset
 
 
 @PromptServer.instance.routes.post("/questionable-nodes/loras/scan")
@@ -36,5 +37,23 @@ async def update_audition_votes(request):
         data = await request.json()
         session = await asyncio.to_thread(save_votes, data["name"], data["votes"])
         return web.json_response(session_view(session))
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        return web.json_response({"error": str(error)}, status=400)
+
+
+@PromptServer.instance.routes.get("/questionable-nodes/tuner/presets")
+async def tuner_presets(request):
+    try:
+        return web.json_response(await asyncio.to_thread(list_presets))
+    except (OSError, ValueError) as error:
+        return web.json_response({"error": str(error)}, status=400)
+
+
+@PromptServer.instance.routes.post("/questionable-nodes/tuner/presets")
+async def save_tuner_preset(request):
+    try:
+        data = await request.json()
+        preset = await asyncio.to_thread(save_preset, data["name"], data["values"], data["strength"], data["blocks"])
+        return web.json_response(preset)
     except (OSError, ValueError, KeyError, TypeError) as error:
         return web.json_response({"error": str(error)}, status=400)

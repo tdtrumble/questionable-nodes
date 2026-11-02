@@ -6,6 +6,7 @@ import uuid
 
 import comfy.lora
 import comfy.lora_convert
+import comfy.model_base
 import comfy.samplers
 import comfy.utils
 import folder_paths
@@ -75,6 +76,43 @@ def baked_weights(weights, patches, values, strength):
     return output
 
 
+def trainer_targets(model, patches):
+    native = {}
+    for key in patches:
+        name = key[0] if isinstance(key, tuple) else key
+        if name.endswith(".weight"):
+            native.setdefault(block_name(key), set()).add(name.removeprefix("diffusion_model.")[:-7])
+    family = "unknown"
+    mapping = {}
+    if isinstance(model, comfy.model_base.Krea2):
+        family = "krea2"
+        mapping = comfy.utils.krea2_to_diffusers(model.model_config.unet_config, output_prefix="diffusion_model.")
+    elif isinstance(model, comfy.model_base.Flux):
+        family = "flux2" if isinstance(model, comfy.model_base.Flux2) else "flux"
+        mapping = comfy.utils.flux_to_diffusers(model.model_config.unet_config, output_prefix="diffusion_model.")
+    elif isinstance(model, (comfy.model_base.SDXL, comfy.model_base.SDXLRefiner)):
+        family = "sdxl"
+        mapping = {key: "diffusion_model." + value for key, value in comfy.utils.unet_to_diffusers(model.model_config.unet_config).items()}
+    reverse, fused = {}, {}
+    for alias, target in mapping.items():
+        if alias.endswith(".weight"):
+            reverse.setdefault(target, set()).add(alias[:-7])
+            if isinstance(target, tuple):
+                fused.setdefault(target[0], set()).add(alias[:-7])
+    diffusers, unmapped = {}, set()
+    for key in patches:
+        aliases = reverse.get(key, set()) | (fused.get(key, set()) if isinstance(key, str) else set())
+        if aliases:
+            diffusers.setdefault(block_name(key), set()).update(aliases)
+        else:
+            unmapped.add(block_name(key))
+    for group in unmapped:
+        diffusers.pop(group, None)
+    native = {key: sorted(value) for key, value in native.items()}
+    diffusers = {key: sorted(value) for key, value in diffusers.items()}
+    return {"family": family, "native": native, "diffusers": diffusers}
+
+
 class LiveLoRATuner(io.ComfyNode):
     @classmethod
     def define_schema(cls):
@@ -116,7 +154,8 @@ class LiveLoRATuner(io.ComfyNode):
         values = strengths(block_strengths)
         weights, metadata, patches = load_patches(model, lora_name)
         patched, groups = apply_blocks(model, patches, values, strength)
-        info = {"blocks": groups, "action": action, "lora": lora_name}
+        info = {"blocks": groups, "action": action, "lora": lora_name,
+                "trainer_targets": trainer_targets(model.model, patches)}
         if action == "export":
             output = baked_weights(weights, patches, values, strength)
             root, filename, _, subfolder, _ = folder_paths.get_save_image_path(

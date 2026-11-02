@@ -140,6 +140,47 @@ read again when settings change, rather than kept in an additional tensor cache.
 Wait time depends on hardware, model, steps, latent size, and other queued work.
 Live mode starts stopped after reopening a workflow; saved block values persist.
 
+### Adjustment presets and trainer settings
+
+After a preview discovers the current blocks, enter a name and click **Save preset**.
+Presets include the global strength and every block multiplier, including default
+values of 1. Saving the same name replaces it. Click **Refresh presets**, select a
+saved name, and **Apply preset** to restore it; live preview refreshes automatically
+when enabled. Application requires exactly the same block names, so preview the
+target LoRA first. Presets are shared across workflows and stored under
+`questionable-nodes/tuner_presets/` inside ComfyUI's configured user directory.
+
+The trainer settings panel updates as adjustments change. Choose a format and use
+**Copy settings**, or select the text and copy manually:
+
+- **Exact adjustments JSON** preserves global, per-block, and effective inference
+  strengths. This is a readable adjustment record, not a trainer configuration.
+- **AI Toolkit** exports a JSON/YAML-compatible `network.network_kwargs.only_if_contains`
+  fragment. Merge into the existing config, keeping your network type/rank/alpha.
+  Krea 2 uses native module names; FLUX, FLUX.2, and SDXL use Diffusers names.
+- **OneTrainer** exports `layer_filter` and `layer_filter_regex` using mapped
+  Diffusers module names. Merge these into the training config.
+- **Musubi** exports `network_args` entries with an exclude-all pattern and exact
+  native module include patterns. Merge with your existing network arguments;
+  your trainer's selected architecture must use these native names.
+- **Kohya / sd-scripts** exports FLUX.1 `train_double_block_indices` and
+  `train_single_block_indices` network arguments. It selects whole blocks, so it
+  can train more modules within those blocks than were present in the source LoRA.
+
+Trainer fragments select **nonzero layers**, not numeric inference strengths.
+A negative strength selects a layer just like a positive one; a fractional strength
+does not become a learning-rate multiplier. Training is not equivalent to scaling
+an already trained adapter. Use **Save LoRA** to preserve exact numeric adjustments,
+then use the resulting weights in a trainer that supports loading that LoRA format.
+All-off selections and unverified mappings display an explanation instead of a
+misleading config. Existing trainer filters and supported target modules still apply.
+
+Formats follow upstream implementations: [AI Toolkit filters](https://github.com/ostris/ai-toolkit/blob/main/toolkit/lora_special.py),
+[AI Toolkit Krea 2](https://github.com/ostris/ai-toolkit/blob/main/extensions_built_in/diffusion_models/krea2/krea2.py),
+[OneTrainer filters](https://github.com/Nerogar/OneTrainer/blob/master/modules/util/ModuleFilter.py),
+[Musubi filters](https://github.com/kohya-ss/musubi-tuner/blob/main/src/musubi_tuner/networks/lora.py),
+and [sd-scripts FLUX block selection](https://github.com/kohya-ss/sd-scripts/blob/main/networks/lora_flux.py).
+
 ## Development checks
 
 From the ComfyUI directory, using its Python environment:

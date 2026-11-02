@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -12,6 +13,9 @@ live = load_module("live_lora")
 
 
 class Model:
+    def __init__(self):
+        self.model = object()
+
     def clone(self):
         return Model()
 
@@ -21,6 +25,30 @@ class Model:
 
 
 class LiveLoRATests(unittest.TestCase):
+    def test_trainer_names_use_native_and_diffusers_krea_mappings(self):
+        model = live.comfy.model_base.Krea2.__new__(live.comfy.model_base.Krea2)
+        torch.nn.Module.__init__(model)
+        model.model_config = SimpleNamespace(unet_config={"layers": 2})
+        info = live.trainer_targets(model, {"diffusion_model.blocks.1.attn.wq.weight": "patch",
+            "diffusion_model.txtfusion.refiner_blocks.0.mlp.up.weight": "patch"})
+        self.assertEqual(info["family"], "krea2")
+        self.assertEqual(info["native"]["blocks.1"], ["blocks.1.attn.wq"])
+        self.assertEqual(info["diffusers"]["blocks.1"], ["transformer_blocks.1.attn.to_q"])
+        self.assertEqual(info["diffusers"]["txtfusion.refiner_blocks.0"], ["text_fusion.refiner_blocks.0.ff.up"])
+
+    def test_fused_flux_trainer_mapping_and_unmapped_group_rejection(self):
+        model = live.comfy.model_base.Flux.__new__(live.comfy.model_base.Flux)
+        torch.nn.Module.__init__(model)
+        model.model_config = SimpleNamespace(unet_config={"depth": 1, "hidden_size": 4})
+        key = "diffusion_model.double_blocks.0.img_attn.qkv.weight"
+        info = live.trainer_targets(model, {key: "patch"})
+        self.assertIn("transformer_blocks.0.attn.to_q", info["diffusers"]["double_blocks.0"])
+        self.assertIn("transformer_blocks.0.attn.to_k", info["diffusers"]["double_blocks.0"])
+        info = live.trainer_targets(model, {(key, (0, 0, 4)): "patch"})
+        self.assertEqual(info["diffusers"]["double_blocks.0"], ["transformer_blocks.0.attn.to_q"])
+        info = live.trainer_targets(model, {key: "patch", "diffusion_model.double_blocks.0.unknown.weight": "patch"})
+        self.assertNotIn("double_blocks.0", info["diffusers"])
+
     def test_native_lora_loader_and_file_boundary(self):
         with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as root:
             path = Path(root) / "test.safetensors"
